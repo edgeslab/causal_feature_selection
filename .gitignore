@@ -1,3 +1,13 @@
 .idea/
 *__pycache__*
 *.DS_Store*
+
+notebooks/CBD/
+notebooks/venv
+notebooks/SSD
+notebooks/LSL
+*.ipynb*
+notebooks/pyBN
+
+*pycache*
+
