@@ -65,7 +65,7 @@ class PCSelect:
 
         data = input_data[[i for i in input_data.columns if "effect" not in i]]
 
-        input_col = np.where(data.columns == input_var)
+        input_col = np.where(data.columns == input_var)[0][0]
         input_var_out = self.pc_alg(data, input_col, alpha, binary_data)
         if self.timer:
             end = time()

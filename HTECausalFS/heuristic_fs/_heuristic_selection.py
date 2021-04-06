@@ -1,6 +1,10 @@
 # from HTECausalFS.util import *
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from HTECausalFS.estimators.bnn import BalancingNeuralNetwork
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+from scipy.spatial import cKDTree
 
 
 class _HeuristicSelection:
@@ -287,3 +291,166 @@ class _HeuristicSelection:
         # after training we need to reset all estimators
         self.reset()
         return keep_cols
+
+
+class CounterfactualCrossValidation(_HeuristicSelection):
+    def __init__(self, epochs=100, **kwargs):
+        super().__init__(**kwargs)
+
+        self.epochs = epochs
+        self.propensity_method = LogisticRegression(max_iter=100000, solver="saga")
+        self.pred_method = BalancingNeuralNetwork
+
+        self.prediction_method = None
+
+        self.eval_method = self.eval
+
+    def eval(self, x, y, t, pred, train_x=None, train_y=None, train_t=None):
+        if train_x is None or train_y is None or train_t is None:
+            train_x = x
+            train_y = y
+            train_t = t
+
+        if not self.fit:
+            self.propensity_method.fit(train_x, train_t)
+            self.prediction_method = self.pred_method(x.shape[1])
+            self.prediction_method.fit(train_x, train_y, train_t)
+            self.fit = True
+
+        propensity = self.propensity_method.predict_proba(x)[:, -1]
+        ft1, ft0 = self.prediction_method.forward_numpy(x, t)
+        # how to reorder them back to t==1 t==0
+        treated_idx = np.where(t == 1)[0]
+        control_idx = np.where(t == 0)[0]
+        ft = np.zeros(x.shape[0])
+        ft[treated_idx] = ft1
+        ft[control_idx] = ft0
+
+        f1_input = np.hstack((x, np.ones((x.shape[0], 1))))
+        f0_input = np.hstack((x, np.zeros((x.shape[0], 1))))
+        f10_input = np.vstack((f1_input, f0_input))
+        f1, f0 = self.prediction_method.forward_numpy(f10_input[:, :-1], f10_input[:, -1])
+        # print(f10)
+        # f1 = f10[f10_input[:, -1] == 1]
+        # f0 = f10[f10_input[:, -1] == 0]
+        # f1 = f10_output[0]
+        # f0 = f10_output[1]
+
+        treatment_part = (t - propensity) / (propensity * (1 - propensity))
+        outcome_part = (y - ft)
+        doubly_part = f1 - f0
+
+        cfcv_plugin = treatment_part * outcome_part + doubly_part
+
+        err = np.mean((cfcv_plugin - pred) ** 2)
+
+        return err
+
+
+class PlugInTau(_HeuristicSelection):
+    def __init__(self, epochs=100, **kwargs):
+        super().__init__(**kwargs)
+
+        self.epochs = epochs
+        self.eval_method = self.cfr_wass
+
+        self.cfr = None
+
+    def cfr_wass(self, x, y, t, pred, train_x=None, train_y=None, train_t=None):
+        if train_x is None or train_y is None or train_t is None:
+            train_x = x
+            train_y = y
+            train_t = t
+
+        if not self.fit:
+            self.cfr = BalancingNeuralNetwork(n_features=x.shape[1])
+            self.cfr.fit(train_x, train_y, train_t, epochs=self.epochs)
+            self.fit = True
+
+        cfr_pred = self.cfr.predict(x)
+        # cfr_pred = cfr_pred.detach().numpy().reshape(-1)
+        err = np.mean((cfr_pred - pred) ** 2)
+
+        return err
+
+
+class PEHESelection(_HeuristicSelection):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.eval_method = self.pehe
+
+        self.kdtree = None
+
+    def pehe(self, x, y, t, pred, train_x=None, train_y=None, train_t=None):
+        nn_effect = self._compute_nn_effect(x, y, t, train_x=train_x, train_y=train_y, train_t=train_t)
+
+        err = np.mean((nn_effect - pred) ** 2)
+
+        return err
+
+    def _compute_nn_effect(self, x, y, t, k=5, train_x=None, train_y=None, train_t=None):
+        if train_x is None or train_y is None or train_t is None:
+            train_x = x
+            train_y = y
+            train_t = t
+            flag = False
+        else:
+            flag = True
+        self.kdtree = cKDTree(train_x)
+        d, idx = self.kdtree.query(x, k=train_x.shape[0])
+        if flag:
+            idx = idx[:, 1:]
+        else:
+            idx = idx[:, :-1]
+        treated = np.where(train_t == 1)[0]
+        control = np.where(train_t == 0)[0]
+        bool_treated = np.isin(idx, treated)
+        bool_control = np.isin(idx, control)
+
+        nn_effect = np.zeros(x.shape[0])
+        for i in range(len(bool_treated)):
+            i_treat_idx = np.where(bool_treated[i, :])[0][:k]
+            i_control_idx = np.where(bool_control[i, :])[0][:k]
+
+            i_treat_nn = train_y[idx[i, i_treat_idx]]
+            i_cont_nn = train_y[idx[i, i_control_idx]]
+
+            nn_effect[i] = np.mean(i_treat_nn) - np.mean(i_cont_nn)
+
+        return nn_effect
+
+
+class TauRisk(_HeuristicSelection):
+
+    def __init__(self, outcome_est=GradientBoostingRegressor(), propensity_est=GradientBoostingClassifier(), **kwargs):
+        super().__init__(**kwargs)
+
+        self.eval_method = self.tau_risk
+        self.outcome_est = outcome_est
+        self.propensity_est = propensity_est
+
+    def tau_risk(self, x, y, t, pred, train_x=None, train_y=None, train_t=None):
+        if train_x is None or train_y is None or train_t is None:
+            train_x = x
+            train_y = y
+            train_t = t
+
+        # print(self.outcome_est, self.propensity_est)
+
+        # train on "train data"
+        if not self.fit:
+            self.outcome_est.fit(train_x, train_y)
+
+        # predict on "test data"
+        m_est = self.outcome_est.predict(x)
+
+        if not self.fit:
+            self.propensity_est.fit(train_x, train_t)
+            self.fit = True
+        p_est = self.propensity_est.predict_proba(x)[:, 1]
+
+        t_risk = (y - m_est) - (t - p_est) * pred
+        t_risk = np.mean(t_risk ** 2)
+
+        return t_risk

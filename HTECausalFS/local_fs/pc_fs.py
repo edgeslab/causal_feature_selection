@@ -39,6 +39,8 @@ class PCFeatureSelect:
         elif adjust_method == "set":
             self.adjust_method = self.adjustment_set_diff
         elif adjust_method == "independence" or adjust_method == "ind":
+            self.adjust_method = self.adjustment_set_selection
+        elif adjust_method == "independence_old" or adjust_method == "ind_old":
             self.adjust_method = self.adjustment_set_independence
         else:
             self.adjust_method = self.adjustment_set_parents
@@ -93,15 +95,45 @@ class PCFeatureSelect:
         return Z
 
     def adjustment_set_selection(self, y_parents, y_children, t_parents, t_children):
+        def med_dfs(col, M, paM, known_parents=None, known_children=None):
+            if col in y_parents:
+                M.add(M)
+
+            if known_parents is not None and known_children is not None:
+                parents = known_parents
+                children = known_children
+            else:
+                parents, children = self.get_input_parent_children(self.data, col, known_parents=known_parents)
+
+            paM = paM.union(parents)
+            for ch in children:
+                if ch == "y":
+                    continue
+                if ch not in t_parents:
+                    M.add(ch)
+                    if ch not in y_parents:
+                        # recursive call
+                        med_dfs(ch, M, paM, known_parents=parents)
+
         # initialize Z
-        Z = list(set(y_parents).union(t_parents))
+        Z = set(y_parents).union(t_parents)
         M = set()
         paM = set()
 
-        def med_dfs(col, M, paM):
-            if col in y_parents:
-                M.add(M)
-            pass
+        med_dfs("t", M, paM, known_parents=y_parents, known_children=t_children)
+
+        Z = Z.union(paM).difference(M)
+
+        return list(Z)
+
+    def get_adjustment_set(self, data):
+        y_parents, y_children, t_parents, t_children = self.get_p_and_c(data)
+
+        adjustment_set = self.adjust_method(y_parents, y_children, t_parents, t_children)
+
+        final_adjustment_cols = [i for i in adjustment_set if i != "y" and i != "t"]
+
+        return final_adjustment_cols
 
     def get_p_and_c(self, data):
         # check if T is binary
