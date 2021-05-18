@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     data_path = input("data: ")
     if data_path == "default":
-        data_path = "../LSL/data/Child_s500_v"
+        data_path = "/data/Child_s500_v"
     file_number = int(input("file number: "))
     _, num_para = np.shape(pd.read_csv(data_path + '1.csv'))
 

@@ -7,7 +7,7 @@ def example_mmhc(df):
     _, n = np.shape(df)
     data = np.array(df, dtype=np.int_)
     bn = mmhc(data)
-    file = open("./output/output_mmhc.txt", "w+")
+    file = open("output/output_mmhc.txt", "w+")
     print("\noutputs:\nthe key is the node,and the value is children.")
     file.write("outputs:\nthe key is the node,and the value is children.\n")
     file.write(str(bn))

@@ -1,7 +1,7 @@
-from HTECausalFS.local_fs.pyCausalFS.CBD.MBs.HITON.HITON_PC import HITON_PC
-from HTECausalFS.local_fs.pyCausalFS.CBD.MBs.pc_simple import pc_simple
-from HTECausalFS.local_fs.pyCausalFS.CBD.MBs.PCMB.getPC import getPC
-from HTECausalFS.local_fs.pyCausalFS.CBD.MBs.semi_HITON.semi_HITON_PC import semi_HITON_PC
+from CBD.MBs.HITON.HITON_PC import HITON_PC
+from CBD.MBs import pc_simple
+from CBD.MBs.PCMB import getPC
+from CBD.MBs.semi_HITON.semi_HITON_PC import semi_HITON_PC
 import numpy as np
 from time import time
 
