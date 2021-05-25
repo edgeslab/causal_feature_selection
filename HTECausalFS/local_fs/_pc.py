@@ -1,5 +1,5 @@
 from CBD.MBs.HITON.HITON_PC import HITON_PC
-from CBD.MBs import pc_simple
+from CBD.MBs.pc_simple import pc_simple
 from CBD.MBs.PCMB import getPC
 from CBD.MBs.semi_HITON.semi_HITON_PC import semi_HITON_PC
 import numpy as np
