@@ -8,7 +8,8 @@ from scipy.spatial import cKDTree
 
 
 class _HeuristicSelection:
-    def __init__(self, split_size=0.5, train_all=False, train_set=False, ground_truth=False, seed=724, verbose=False):
+    def __init__(self, split_size=0.5, train_all_features=True, train_set=False, ground_truth=False, seed=724,
+                 verbose=False):
         self.split_size = split_size
         self.seed = seed
         self.verbose = verbose
@@ -17,7 +18,7 @@ class _HeuristicSelection:
 
         self.fit = False
 
-        self.train_all = train_all
+        self.train_all_features = train_all_features
         self.train_set = train_set
         self.ground_truth = ground_truth
 
@@ -120,7 +121,7 @@ class _HeuristicSelection:
                 # ----------------------------------------------------------------
                 if self.train_set:
                     # Train on all features and the training set
-                    if self.train_all:
+                    if self.train_all_features:
                         temp_risk = self.eval_method(all_x_test, y_test, t_test, pred, train_x=all_x_train, train_y=y,
                                                      train_t=t)
                     # Train on subset features and the training set
@@ -131,7 +132,7 @@ class _HeuristicSelection:
                     # ----------------------------------------------------------------
                     # My original default case (all features + test set)
                     # ----------------------------------------------------------------
-                    if self.train_all:
+                    if self.train_all_features:
                         temp_risk = self.eval_method(all_x_test, y_test, t_test, pred)
                     # Train on subset features + test set
                     else:
@@ -194,7 +195,7 @@ class _HeuristicSelection:
         # current_risk = tau_risk(all_x_train, y, t, all_x_test, y_test, t_test, pred)
         if self.train_set:
             # Train on all features and the training set
-            if self.train_all:
+            if self.train_all_features:
                 current_risk = self.eval_method(all_x_test, y_test, t_test, pred, train_x=all_x_train,
                                                 train_y=y,
                                                 train_t=t)
@@ -206,7 +207,7 @@ class _HeuristicSelection:
             # ----------------------------------------------------------------
             # My original default case (all features + test set)
             # ----------------------------------------------------------------
-            if self.train_all:
+            if self.train_all_features:
                 current_risk = self.eval_method(all_x_test, y_test, t_test, pred)
             # Train on subset features + test set
             else:
@@ -253,7 +254,7 @@ class _HeuristicSelection:
                 # ----------------------------------------------------------------
                 if self.train_set:
                     # Train on all features and the training set
-                    if self.train_all:
+                    if self.train_all_features:
                         temp_risk = self.eval_method(all_x_test, y_test, t_test, pred, train_x=all_x_train,
                                                      train_y=y,
                                                      train_t=t)
@@ -265,7 +266,7 @@ class _HeuristicSelection:
                     # ----------------------------------------------------------------
                     # My original default case (all features + test set)
                     # ----------------------------------------------------------------
-                    if self.train_all:
+                    if self.train_all_features:
                         temp_risk = self.eval_method(all_x_test, y_test, t_test, pred)
                     # Train on subset features + test set
                     else:
