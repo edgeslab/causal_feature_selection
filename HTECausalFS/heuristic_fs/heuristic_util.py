@@ -51,16 +51,7 @@ def simple_mutation(new_chrom, mutation_rate=None, rng=None):
             new_chrom[i] = 1 - new_chrom[i]
     return new_chrom
 
-
 # ----------------------------------------------------------------
 # RGA (The Rival Genetic Algorithm)
 # https://link.springer.com/content/pdf/10.1007/s11227-020-03378-9.pdf
 # ----------------------------------------------------------------
-
-def rga_selection(scores, chromosomes, rng=None):
-    if rng is None:
-        rng = np.random.default_rng()
-    if np.sum(scores) != 1:
-        probabilities = scores / np.sum(scores)
-    else:
-        probabilities = scores
