@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn.functional as F
 import torch.optim as optim
 import numpy
+from pytorch.util.nn_tools import simple_layer_creator, get_output_shape
 
 import os
 
@@ -28,8 +29,10 @@ def similarity(o1, o2):
 # The Balancing Neural Network - Johansson et al. ICML '16
 class BalancingNeuralNetwork(nn.Module):
     def __init__(self,
-                 n_features,
+                 n_features=None,
                  n_outputs=1,
+                 pre_treatment=None,
+                 post_treatment=None,
                  optimizer=optim.SGD,
                  optim_params=None,
                  pred_loss=nn.MSELoss,
@@ -43,22 +46,46 @@ class BalancingNeuralNetwork(nn.Module):
         # We concatenate the output here with the treatment indicator later and pass them to the similarity and the
         # final layers
         self.pre_treatment_rep_size = 10
-        self.pre_treatment = nn.Sequential(
-            nn.Linear(n_features, 100),
-            # nn.ReLU(), # if we want activation
-            nn.Linear(100, self.pre_treatment_rep_size),
-        )
+        if pre_treatment is not None:
+            if isinstance(pre_treatment, dict):
+                pre_treatment = simple_layer_creator(layer_dict=pre_treatment)
+            elif isinstance(pre_treatment, list):
+                pre_treatment = simple_layer_creator(layer_list=pre_treatment)
+            self.pre_treatment = pre_treatment
+            self.pre_treatment_rep_size = get_output_shape(pre_treatment)
+        elif n_features is not None:
+            self.n_features = n_features
+            self.pre_treatment_rep_size = 25
+            self.pre_treatment = nn.Sequential(
+                nn.Linear(n_features, 25),
+                nn.ReLU(),  # if we want activation
+                nn.Linear(25, self.pre_treatment_rep_size),
+                nn.ReLU(),
+            )
+        else:
+            print("No pre_treatment layer or n_features defined!")
 
         # the first layer of the "treat_concat" appends the treatment, so +1 to output of pre-treatment representation
-        self.post_treatment = nn.Sequential(
-            nn.Linear(self.pre_treatment_rep_size + 1, 100),
-            nn.Linear(100, n_outputs))
+        if post_treatment is not None:
+            if isinstance(post_treatment, dict):
+                post_treatment = simple_layer_creator(layer_dict=post_treatment)
+            elif isinstance(pre_treatment, list):
+                post_treatment = simple_layer_creator(layer_list=post_treatment)
+            self.post_treatment = post_treatment
+        else:
+            self.post_treatment = nn.Sequential(
+                nn.Linear(self.pre_treatment_rep_size + 1, 25),
+                nn.ReLU(),
+                nn.Linear(25, 25),
+                nn.ReLU(),
+                nn.Linear(25, n_outputs)
+            )
 
         # defining optimizers
         if optim_params is not None:
             self.optimizer = optimizer(self.parameters(), **optim_params)
         else:
-            self.optimizer = optimizer(self.parameters(), lr=0.01)
+            self.optimizer = optimizer(self.parameters(), lr=0.001)
 
         # defining loss functions
         self.pred_loss = pred_loss()
@@ -128,7 +155,7 @@ class BalancingNeuralNetwork(nn.Module):
         # Step the optimizer
         self.optimizer.step()
 
-    def fit(self, x, y, t, epochs=100, verbose=False):
+    def fit(self, x, y, t, epochs=1000, verbose=False):
         if type(x) == numpy.ndarray:
             x = torch.from_numpy(x).float()
         if type(y) == numpy.ndarray:
