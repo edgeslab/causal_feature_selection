@@ -319,7 +319,7 @@ class _HeuristicSelection:
         return keep_cols
 
     def rival_genetic_algorithm(self, estimator, data, pop_size=100, num_generations=10, metalearner=False,
-                                neural_network=False, nn_params=None, fast_crossovers=False):
+                                neural_network=False, nn_params=None, fast_crossover=False):
         outcome_col = "y"
         treatment_col = "t"
         effect_col = "effect"
@@ -344,25 +344,35 @@ class _HeuristicSelection:
         if pop_size % 2 == 1:
             pop_size = pop_size + 1  # guarantee even population for dividing by two
 
+        H = dict()  # for keeping an archive
+
         self.reset()
         for g in range(num_generations):
             scores = np.zeros(chromosomes.shape[0])
-            if fast_crossovers:
+            if fast_crossover:
                 Tu = num_generations / 2
                 if g < Tu:
-                    num_crossovers = np.round((pop_size - 1) * (1 - g / Tu))
+                    num_crossovers = int(np.round((pop_size - 1) * (1 - g / Tu)))
                 else:
-                    num_crossovers = 1 + np.round((pop_size - 1) * ((g - Tu) / Tu))
+                    num_crossovers = int(1 + np.round((pop_size - 1) * ((g - Tu) / Tu)))
             else:
                 num_crossovers = pop_size
             for idx, chrom in enumerate(chromosomes):
-                x = all_x_train[:, chrom == 1]
-                x_test = all_x_test[:, chrom == 1]
-                pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
-                temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+                chrom_str = str(chrom)
 
-                scores[idx] = temp_risk
+                if chrom_str not in H:
+                    x = all_x_train[:, chrom == 1]
+                    x_test = all_x_test[:, chrom == 1]
+                    pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
+
+                    temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+
+                    scores[idx] = temp_risk
+
+                    H[chrom_str] = temp_risk
+                else:
+                    scores[idx] = H[chrom_str]
 
             # favg = np.mean(risks/np.sum(risks))
             # favg = np.mean(risks)
@@ -416,16 +426,24 @@ class _HeuristicSelection:
 
                 new_chromosomes[j] = new_chrom
 
-            new_scores = np.zeros(pop_size)
+            new_scores = np.zeros(num_crossovers)
             for idx, chrom in enumerate(new_chromosomes):
-                x = all_x_train[:, chrom == 1]
-                x_test = all_x_test[:, chrom == 1]
-                # print(g, x.shape, x_test.shape)
-                pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
-                temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+                chrom_str = str(chrom)
 
-                new_scores[idx] = temp_risk
+                if chrom_str not in H:
+                    x = all_x_train[:, chrom == 1]
+                    x_test = all_x_test[:, chrom == 1]
+                    # print(g, x.shape, x_test.shape)
+                    pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
+
+                    temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+
+                    new_scores[idx] = temp_risk
+
+                    H[chrom_str] = temp_risk
+                else:
+                    new_scores[idx] = H[chrom_str]
 
             all_chroms = np.vstack((chromosomes, new_chromosomes))
             all_risks = np.concatenate((scores, new_scores))
@@ -436,6 +454,8 @@ class _HeuristicSelection:
             if all_risks[sorted_all[0]] < best_score:
                 best_score = gen_score
                 best_chrom = chromosomes[0]
+
+            # print(len(H))
 
         keep_cols = [col for i, col in enumerate(full_cols) if best_chrom[i] == 1]
 
