@@ -9,6 +9,8 @@ from scipy.spatial import cKDTree
 # util
 from HTECausalFS.heuristic_fs.heuristic_util import simple_selection, simple_mutation, simple_crossover
 
+# np.seterr(all='raise')
+
 
 class _HeuristicSelection:
     def __init__(self, split_size=0.5, train_all_features=True, train_set=False, ground_truth=False, seed=724,
@@ -283,6 +285,10 @@ class _HeuristicSelection:
             for idx, chrom in enumerate(chromosomes):
                 x = all_x_train[:, chrom == 1]
                 x_test = all_x_test[:, chrom == 1]
+
+                if x.shape[1] < 1:
+                    scores[idx] = np.inf
+
                 pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
                 temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
@@ -336,9 +342,17 @@ class _HeuristicSelection:
         rng = np.random.default_rng(seed=self.seed)
         feature_size = all_x_train.shape[1]
         chromosomes = rng.choice([0, 1], size=(pop_size, feature_size))
+
+        # make sure at least one feature selected
+        zero_idx = chromosomes.sum(axis=1) == 0
+        num_zero_idx = zero_idx.sum()
+        while (chromosomes[zero_idx].sum(axis=1) == 0).any():
+            chromosomes[zero_idx] = rng.choice([0, 1], size=(num_zero_idx, feature_size))
+
         chrom_idx = np.arange(pop_size)
 
         best_score = np.inf
+        worst_score = 0
         best_chrom = np.zeros(feature_size)
 
         if pop_size % 2 == 1:
@@ -364,9 +378,13 @@ class _HeuristicSelection:
                 if chrom_str not in H:
                     x = all_x_train[:, chrom == 1]
                     x_test = all_x_test[:, chrom == 1]
+
                     pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
                     temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+
+                    if np.isnan(temp_risk):
+                        temp_risk = worst_score
 
                     scores[idx] = temp_risk
 
@@ -376,7 +394,10 @@ class _HeuristicSelection:
 
             # favg = np.mean(risks/np.sum(risks))
             # favg = np.mean(risks)
-            favg = 1 - np.mean((scores - np.min(scores)) / (np.max(scores) - np.min(scores)))
+            if np.max(scores) == np.min(scores):
+                favg = 0
+            else:
+                favg = 1 - np.mean((scores - np.min(scores)) / (np.max(scores) - np.min(scores)))
             mutation_rate = favg - g * (favg / num_generations)
 
             # choose two
@@ -400,8 +421,20 @@ class _HeuristicSelection:
             winner_scores = scores[winners]
             loser_scores = scores[losers]
 
-            winner_probs = (1 - winner_scores) / (np.sum(1 - winner_scores))
-            loser_probs = (1 - loser_scores) / (np.sum(1 - loser_scores))
+            # winner_probs = 1 - winner_scores / np.sum(winner_scores)
+            # loser_probs = 1 - loser_scores / np.sum(loser_scores)
+
+            if winner_scores.max() == winner_scores.min():
+                winner_probs = np.ones(len(winner_scores)) / len(winner_scores)
+            else:
+                winner_probs = 2 - (winner_scores - winner_scores.min()) / (winner_scores.max() - winner_scores.min())
+                winner_probs = winner_probs / np.sum(winner_probs)
+
+            if loser_scores.max() == loser_scores.min():
+                loser_probs = np.ones(len(loser_scores)) / len(loser_scores)
+            else:
+                loser_probs = 2 - (loser_scores - loser_scores.min()) / (loser_scores.max() - loser_scores.min())
+                loser_probs = loser_probs / np.sum(loser_probs)
 
             new_chromosomes = np.zeros((num_crossovers, feature_size))
             for j in range(num_crossovers):
@@ -426,6 +459,11 @@ class _HeuristicSelection:
 
                 new_chromosomes[j] = new_chrom
 
+            zero_idx = new_chromosomes.sum(axis=1) == 0
+            num_zero_idx = zero_idx.sum()
+            while (new_chromosomes[zero_idx].sum(axis=1) == 0).any():
+                new_chromosomes[zero_idx] = rng.choice([0, 1], size=(num_zero_idx, feature_size))
+
             new_scores = np.zeros(num_crossovers)
             for idx, chrom in enumerate(new_chromosomes):
 
@@ -434,10 +472,13 @@ class _HeuristicSelection:
                 if chrom_str not in H:
                     x = all_x_train[:, chrom == 1]
                     x_test = all_x_test[:, chrom == 1]
-                    # print(g, x.shape, x_test.shape)
+
                     pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
                     temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
+
+                    if np.isnan(temp_risk):
+                        temp_risk = worst_score
 
                     new_scores[idx] = temp_risk
 
@@ -451,9 +492,14 @@ class _HeuristicSelection:
             sorted_all = np.argsort(all_risks)
             chromosomes = all_chroms[sorted_all[:pop_size]].copy()
             gen_score = all_risks[sorted_all[0]]
-            if all_risks[sorted_all[0]] < best_score:
+            if gen_score < best_score:
                 best_score = gen_score
                 best_chrom = chromosomes[0]
+            if all_risks[sorted_all[-1]] > worst_score:
+                worst_score = all_risks[sorted_all[-1]]
+
+            if self.verbose:
+                print(f"Generation {g + 1} finished. Best score = {best_score}. Size of index = {len(H)}")
 
             # print(len(H))
 
@@ -484,6 +530,13 @@ class _HeuristicSelection:
         rng = np.random.default_rng(self.seed)
 
         particle_positions = rng.random(size=(swarm_size, feature_size))
+
+        # make sure at least one feature selected
+        zero_idx = (particle_positions < 0.5).all(axis=1)
+        num_zero_idx = zero_idx.sum()
+        while (particle_positions[zero_idx] < 0.5).all(axis=1).any():
+            particle_positions[zero_idx] = rng.random(size=(num_zero_idx, feature_size))
+
         particle_velocities = np.zeros((swarm_size, feature_size))
         particle_idx = np.arange(swarm_size)
 
@@ -505,6 +558,7 @@ class _HeuristicSelection:
                     # calculate fitness score
                     x = all_x_train[:, use_idx]
                     x_test = all_x_test[:, use_idx]
+
                     pred = self._fit_estimator(estimator, x, y, t, x_test, metalearner, neural_network, nn_params)
 
                     temp_risk = self._get_risk(all_x_test, y_test, t_test, pred, all_x_train, x, y, t, x_test)
@@ -536,7 +590,16 @@ class _HeuristicSelection:
 
                 particle_positions[losing_particle] += particle_velocities[losing_particle]
 
+            # make sure at least one feature selected
+            zero_idx = (particle_positions < 0.5).all(axis=1)
+            num_zero_idx = zero_idx.sum()
+            while (particle_positions[zero_idx] < 0.5).all(axis=1).any():
+                particle_positions[zero_idx] = rng.random(size=(num_zero_idx, feature_size))
+
             time += 1
+
+            if self.verbose:
+                print(f"Iteration {time} finished. Best score = {best_error}")
 
         keep_cols = [col for i, col in enumerate(full_cols) if best_particle[i] > threshold]
 

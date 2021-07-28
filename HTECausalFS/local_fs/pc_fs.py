@@ -133,8 +133,8 @@ class PCFeatureSelect:
 
         final_adjustment_cols = [i for i in adjustment_set if i != "y" and i != "t"]
 
-        if len(final_adjustment_cols) < 1:
-            final_adjustment_cols = [i for i in data.columns if i != "y" and i != "t"]
+        # if len(final_adjustment_cols) < 1:
+        #     final_adjustment_cols = [i for i in data.columns if i != "y" and i != "t"]
 
         return final_adjustment_cols
 
