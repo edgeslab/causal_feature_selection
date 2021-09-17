@@ -94,6 +94,9 @@ class PCFeatureSelect:
         # print(Z)
         return Z
 
+    def o_set_approximation(self, y_parents, y_children, t_parents, t_children):
+        pass
+
     def adjustment_set_selection(self, y_parents, y_children, t_parents, t_children):
         def med_dfs(col, M, paM, known_parents=None, known_children=None):
             if col in y_parents:
