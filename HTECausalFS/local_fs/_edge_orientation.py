@@ -41,6 +41,9 @@ class EdgeOrientation:
         if self.edge_alg in self.non_binary_eo:
             self.can_binary = True
 
+        self.t_col = "t"
+        self.y_col = "y"
+
     def orient_edges(self, data, y_pc, t_pc, known_parents_y=None, known_parents_t=None, known_children_y=None,
                      known_children_t=None):
         start = time()
@@ -50,14 +53,14 @@ class EdgeOrientation:
         # ----------------------------------------------------------------
         # Y PC
         # ----------------------------------------------------------------
-        y_dat = data[["y"] + y_pc]
+        y_dat = data[[self.y_col] + y_pc]
         y_graph = nx.Graph()
         for col in y_pc:
             if known_parents_y is not None and col in known_parents_y:
                 continue
             if known_children_y is not None and col in known_children_y:
                 continue
-            y_graph.add_edge("y", col)
+            y_graph.add_edge(self.y_col, col)
 
         if self.edge_alg_name in self.graph_based:
             y_output = obj.predict(y_dat, nx.Graph(y_graph))
@@ -65,10 +68,10 @@ class EdgeOrientation:
             y_output = obj.orient_graph(y_dat, nx.Graph(y_graph))
 
         y_parents = []
-        for parent in y_output.predecessors("y"):
+        for parent in y_output.predecessors(self.y_col):
             y_parents.append(parent)
         y_children = []
-        for child in y_output.successors("y"):
+        for child in y_output.successors(self.y_col):
             y_children.append(child)
 
         if known_parents_y is not None:
@@ -86,7 +89,7 @@ class EdgeOrientation:
         # ----------------------------------------------------------------
 
         # check if T is binary
-        if np.unique(data["t"]).shape[0] == 2:
+        if np.unique(data[self.t_col]).shape[0] == 2:
             self.t_binary = True
 
         # if T is binary and we cannot use edge orientation on binary data, then skip
@@ -101,14 +104,14 @@ class EdgeOrientation:
                 t_children = list(set(t_pc).difference(t_parents))
             return y_parents, y_children, t_parents, t_children
 
-        t_dat = data[["t"] + t_pc]
+        t_dat = data[[self.t_col] + t_pc]
         t_graph = nx.Graph()
         for col in t_pc:
             if known_parents_t is not None and col in known_parents_t:
                 continue
             if known_children_t is not None and col in known_children_t:
                 continue
-            t_graph.add_edge("t", col)
+            t_graph.add_edge(self.t_col, col)
 
         if self.edge_alg_name in self.graph_based:
             t_output = obj.predict(t_dat, nx.Graph(t_graph))
@@ -117,10 +120,10 @@ class EdgeOrientation:
             t_output = obj.orient_graph(t_dat, nx.Graph(t_graph))
 
         t_parents = []
-        for parent in t_output.predecessors("t"):
+        for parent in t_output.predecessors(self.t_col):
             t_parents.append(parent)
         t_children = []
-        for child in t_output.successors("t"):
+        for child in t_output.successors(self.t_col):
             t_children.append(child)
 
         if known_parents_t is not None:

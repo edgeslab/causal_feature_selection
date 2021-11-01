@@ -34,6 +34,9 @@ class PCFeatureSelect:
 
         self.t_binary = True
 
+        self.y_col = "y"
+        self.t_col = "t"
+
         if adjust_method == "parents":
             self.adjust_method = self.adjustment_set_parents
         elif adjust_method == "set":
@@ -64,8 +67,8 @@ class PCFeatureSelect:
 
         Z = [i for i in t_parents]
         M = []
-        y_data = self.data[["y"]].values
-        t_data = self.data[["t"]].values
+        y_data = self.data[[self.y_col]].values
+        t_data = self.data[[self.t_col]].values
         for child in t_children:
             if child in y_children:
                 continue
@@ -123,38 +126,43 @@ class PCFeatureSelect:
         M = set()
         paM = set()
 
-        med_dfs("t", M, paM, known_parents=y_parents, known_children=t_children)
+        med_dfs(self.t_col, M, paM, known_parents=y_parents, known_children=t_children)
 
         Z = Z.union(paM).difference(M)
 
         return list(Z)
 
-    def get_adjustment_set(self, data):
+    def get_adjustment_set(self, data, y_col="y", t_col="t"):
+
+        self.y_col = y_col
+        self.t_col = t_col
+        self.pc.y_col = y_col
+        self.pc.t_col = t_col
+        self.eo.y_col = y_col
+        self.eo.t_col = t_col
+
         y_parents, y_children, t_parents, t_children = self.get_p_and_c(data)
 
         adjustment_set = self.adjust_method(y_parents, y_children, t_parents, t_children)
 
-        final_adjustment_cols = [i for i in adjustment_set if i != "y" and i != "t"]
-
-        # if len(final_adjustment_cols) < 1:
-        #     final_adjustment_cols = [i for i in data.columns if i != "y" and i != "t"]
+        final_adjustment_cols = [i for i in adjustment_set if i != self.y_col and i != self.t_col]
 
         return final_adjustment_cols
 
     def get_p_and_c(self, data):
         # check if T is binary
-        if np.unique(data["t"]).shape[0] == 2:
+        if np.unique(data[self.t_col]).shape[0] == 2:
             self.t_binary = True
         self.data = data.copy()
 
         if self.use_propensity:
-            all_cols = [i for i in data.columns if i != "t" and i != "y" and i != "effect"]
+            all_cols = [i for i in data.columns if i != self.t_col and i != self.y_col and i != "effect"]
             x = data[all_cols].values
-            t = data["t"].values
+            t = data[self.t_col].values
 
             self.propensity_model.fit(x, t)
             t_prop = self.propensity_model.predict(x)
-            self.data["t"] = t_prop
+            self.data[self.t_col] = t_prop
 
         return self._get_p_and_c()
 
@@ -198,8 +206,8 @@ class PCFeatureSelect:
 
         data = self.data
 
-        y_data = data[["y"]].values
-        t_data = data[["t"]].values
+        y_data = data[[self.y_col]].values
+        t_data = data[[self.t_col]].values
         known_parents_y = []
         known_parents_t = []
         y_pc_combs = itertools.combinations(y_pc, 2)

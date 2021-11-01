@@ -9,12 +9,13 @@ from scipy.spatial import cKDTree
 # util
 from HTECausalFS.heuristic_fs.heuristic_util import simple_selection, simple_mutation, simple_crossover
 
+
 # np.seterr(all='raise')
 
 
 class _HeuristicSelection:
     def __init__(self, split_size=0.5, train_all_features=True, train_set=False, ground_truth=False, seed=724,
-                 verbose=False):
+                 verbose=False, y_col="y", t_col="t"):
         self.split_size = split_size
         self.seed = seed
         self.verbose = verbose
@@ -27,6 +28,9 @@ class _HeuristicSelection:
         self.train_set = train_set
         self.ground_truth = ground_truth
 
+        self.y_col = y_col
+        self.t_col = t_col
+
     def reset(self):
         self.fit = False
 
@@ -37,8 +41,8 @@ class _HeuristicSelection:
     # ----------------------------------------------------------------
     def _process_initial_data(self, data):
         np.random.seed(self.seed)
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
 
         ignore_cols = [outcome_col, treatment_col]
 
@@ -70,10 +74,11 @@ class _HeuristicSelection:
             "y_test": y_test, "t": t, "t_test": t_test, "train_indices": train_indices, "test_indices": test_indices
         }
 
-    def forward_selection(self, estimator, data, metalearner=False, neural_network=False, nn_params=None):
+    def forward_selection(self, estimator, data, metalearner=False, neural_network=False, nn_params=None,
+                          n_features_to_select=np.inf):
         np.random.seed(self.seed)
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         other_cols = [i for i in data.columns if i not in ignore_cols]
@@ -115,13 +120,18 @@ class _HeuristicSelection:
             else:
                 exit_flag = True
 
+            # stop after k features added
+            if len(keep_cols) >= n_features_to_select:
+                exit_flag = True
+
         self.reset()
         return keep_cols
 
-    def backward_selection(self, estimator, data, metalearner=False, neural_network=False, nn_params=None):
+    def backward_selection(self, estimator, data, metalearner=False, neural_network=False, nn_params=None,
+                           n_features_to_select=np.inf, n_features_to_remove=np.inf):
         np.random.seed(self.seed)
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]
@@ -167,6 +177,13 @@ class _HeuristicSelection:
             else:
                 exit_flag = True
 
+            # stop after k features kept
+            if len(full_cols) - len(other_cols) >= n_features_to_select:
+                exit_flag = True
+
+            if len(remove_cols) >= n_features_to_remove:
+                exit_flag = True
+
         keep_cols = [i for i in full_cols if i not in remove_cols]
 
         # if we somehow didn't find variables to keep, then we default to all variables
@@ -179,8 +196,8 @@ class _HeuristicSelection:
 
     def select_top_k_backwards(self, estimator, data, metalearner=False, neural_network=False, k=10, nn_params=None):
         np.random.seed(self.seed)
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]
@@ -220,8 +237,8 @@ class _HeuristicSelection:
 
     def select_top_k_forwards(self, estimator, data, metalearner=False, neural_network=False, k=10, nn_params=None):
         np.random.seed(self.seed)
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]
@@ -262,8 +279,8 @@ class _HeuristicSelection:
 
     def simple_genetic_algorithm(self, estimator, data, pop_size=100, num_generations=10, metalearner=False,
                                  neural_network=False, nn_params=None, crossover_rate=None, mutation_rate=None):
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]
@@ -326,8 +343,8 @@ class _HeuristicSelection:
 
     def rival_genetic_algorithm(self, estimator, data, pop_size=100, num_generations=10, metalearner=False,
                                 neural_network=False, nn_params=None, fast_crossover=False):
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]
@@ -509,8 +526,8 @@ class _HeuristicSelection:
 
     def competitive_swarm(self, estimator, data, swarm_size=100, max_generations=200, metalearner=False,
                           neural_network=False, nn_params=None, threshold=0.5, phi=0.1):
-        outcome_col = "y"
-        treatment_col = "t"
+        outcome_col = self.y_col
+        treatment_col = self.t_col
         effect_col = "effect"
         ignore_cols = [outcome_col, treatment_col, effect_col]
         full_cols = [i for i in data.columns if i not in ignore_cols]

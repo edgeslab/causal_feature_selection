@@ -31,15 +31,16 @@ class PCSelect:
         else:
             self.pc_alg = pc_alg
 
+        self.t_col = "t"
+        self.y_col = "y"
+
     def output_pc(self, input_data, alpha=0.05, binary_data=False):
         start = time()
 
         data = input_data[[i for i in input_data.columns if i != "effect"]]
 
-        y_col = np.where(data.columns == "y")[0][0]
-        t_col = np.where(data.columns == "t")[0][0]
-        # y_col = data.columns[np.where(data.columns == "y")[0][0]]
-        # t_col = data.columns[np.where(data.columns == "t")[0][0]]
+        y_col = np.where(data.columns == self.y_col)[0][0]
+        t_col = np.where(data.columns == self.t_col)[0][0]
 
         # print(data.shape, y_col, binary_data)
         y_out = self.pc_alg(data, y_col, alpha, binary_data)
