@@ -1,7 +1,7 @@
-from CBD.MBs.HITON.HITON_PC import HITON_PC
-from CBD.MBs.pc_simple import pc_simple
-from CBD.MBs.PCMB.getPC import getPC
-from CBD.MBs.semi_HITON.semi_HITON_PC import semi_HITON_PC
+from pyCausalFS.CBD.MBs.HITON.HITON_PC import HITON_PC
+from pyCausalFS.CBD.MBs.pc_simple import pc_simple
+from pyCausalFS.CBD.MBs.PCMB.getPC import getPC
+from pyCausalFS.CBD.MBs.semi_HITON.semi_HITON_PC import semi_HITON_PC
 import numpy as np
 from time import time
 

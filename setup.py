@@ -24,6 +24,7 @@ setuptools.setup(
                       "cdt",
                       "fcit",
                       "pandas",
+                      "pyCausalFS @ https://github.com/chris-tran-16/pyCausalFS.git"
                       ],
     python_requires='>=3.6',
 )
