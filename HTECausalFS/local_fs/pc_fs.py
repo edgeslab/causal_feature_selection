@@ -5,11 +5,13 @@ from HTECausalFS.local_fs._pc import *
 from fcit import fcit  # https://github.com/kjchalup/fcit -> pip install fcit
 from time import time
 from sklearn.linear_model import LogisticRegression
+import networkx as nx
+from collections import defaultdict
 
 
 class PCFeatureSelect:
 
-    def __init__(self, pc_alg="pc_simple", edge_alg="reci", adjust_method="parents", use_propensity=False,
+    def __init__(self, pc_alg="pc_simple", edge_alg="reci", adjust_method="independence", use_propensity=False,
                  propensity_model=LogisticRegression, propensity_params=None, alpha=0.05, binary_data=False,
                  check_colliders=False, timer=False):
 
@@ -17,7 +19,7 @@ class PCFeatureSelect:
         if propensity_params is not None:
             self.propensity_model = propensity_model(**propensity_params)
         else:
-            self.propensity_model = LogisticRegression()
+            self.propensity_model = propensity_model()
 
         self.timer = timer
 
@@ -37,12 +39,19 @@ class PCFeatureSelect:
         self.y_col = "y"
         self.t_col = "t"
 
+        self.adjustment_set = None
+
+        self.adjust_method_str = adjust_method
         if adjust_method == "parents":
             self.adjust_method = self.adjustment_set_parents
         elif adjust_method == "set":
             self.adjust_method = self.adjustment_set_diff
         elif adjust_method == "independence" or adjust_method == "ind":
             self.adjust_method = self.adjustment_set_selection
+        elif adjust_method == "o-set" or adjust_method == "o_set" or adjust_method == "o set":
+            self.adjust_method = self.o_set_approximation
+        elif adjust_method == "nonforbidden":
+            self.adjust_method = self.o_set_approximation
         elif adjust_method == "independence_old" or adjust_method == "ind_old":
             self.adjust_method = self.adjustment_set_independence
         else:
@@ -59,10 +68,6 @@ class PCFeatureSelect:
 
         return adjustment_cols
 
-    # ----------------------------------------------------------------
-    # TODO: combine set_diff and set_independence...
-    # if T dep Y given Z then return Z automatically
-    # ----------------------------------------------------------------
     def adjustment_set_independence(self, y_parents, y_children, t_parents, t_children):
 
         Z = [i for i in t_parents]
@@ -98,7 +103,64 @@ class PCFeatureSelect:
         return Z
 
     def o_set_approximation(self, y_parents, y_children, t_parents, t_children):
-        pass
+        # initialize data col number map
+        # data_col_map = {col: i for i, col in enumerate(self.data.columns)}
+        all_known_parents = defaultdict(lambda: None, {self.t_col: t_parents, self.y_col: y_parents})
+
+        dn = set(y_children)
+        Z = set(t_children)
+        V = {self.t_col}.union(t_children)
+
+        E = set([(self.t_col, j) for j in Z])
+        E = E.union([(j, self.t_col) for j in t_parents])
+        E = E.union([(j, self.y_col) for j in y_parents])
+        E = E.union([(self.y_col, j) for j in y_children])
+        edge_count = {e: 1 for e in E}
+        while len(Z) > 0:
+            z = Z.pop()
+            # find pa(z) and ch(z)
+            pa_z, ch_z = self.get_input_parent_children(self.data, z, known_parents=all_known_parents[z])
+
+            dn = dn.union([z])
+            Z = Z.union(ch_z).difference(dn)
+            V = V.union(Z)
+            #     E = E.union(set([(z, z_c) for z_c in ch_z]))
+            for z_c in ch_z:
+                e = (z, z_c)
+                #         E.add(e)
+                edge_count.setdefault(e, 0)
+                edge_count[e] += 1
+            for z_p in pa_z:
+                e = (z_p, z)
+                #         E. add(e)
+                edge_count.setdefault(e, 0)
+                edge_count[e] += 1
+
+        remove_edges = []
+        for e in edge_count:
+            r_e = (e[1], e[0])
+            if r_e in edge_count:
+                # print(e, r_e)
+                if edge_count[r_e] > edge_count[e]:
+                    # edge_count.popitem(e)
+                    # del edge_count[e]
+                    remove_edges.append(e)
+                else:
+                    # edge_count.popitem(r_e)
+                    # del edge_count[e]
+                    remove_edges.append(r_e)
+        edge_count = {e: val for e, val in zip(edge_count.keys(), edge_count.values()) if
+                      edge_count not in remove_edges}
+        G = nx.DiGraph()
+        G.add_edges_from(edge_count.keys())
+        if self.t_col not in G.nodes():
+            G.add_node(self.t_col)
+        if self.y_col not in G.nodes():
+            G.add_node(self.y_col)
+
+        if self.adjust_method_str == "nonforbidden":
+            return self.non_forbidden(G)
+        return self.optimal_adjust(G)
 
     def adjustment_set_selection(self, y_parents, y_children, t_parents, t_children):
         def med_dfs(col, M, paM, known_parents=None, known_children=None):
@@ -167,37 +229,63 @@ class PCFeatureSelect:
         return self._get_p_and_c()
 
     def _get_p_and_c(self):
-        y_pc, t_pc = self.pc.output_pc(self.data, self.alpha, self.binary_data)
 
-        known_parents_y, known_parents_t = None, None
-        known_children_y, known_children_t = None, None
-        if self.check_colliders:
-            known_parents_y, known_parents_t = self._independence_parents(y_pc, t_pc)
-            if len(known_parents_y) > 0:
-                known_children_y = [i for i in y_pc if i not in known_parents_y]
-            if len(known_parents_t) > 0:
-                known_children_t = [i for i in t_pc if i not in known_parents_t]
-        y_parents, y_children, t_parents, t_children = self.eo.orient_edges(self.data, y_pc, t_pc,
-                                                                            known_parents_y=known_parents_y,
-                                                                            known_parents_t=known_parents_t,
-                                                                            known_children_y=known_children_y,
-                                                                            known_children_t=known_children_t)
+        # if using CMB, only orient edges for undirected edges
+        if self.pc.orients_edges:
+            output_package = self.pc.output_pc(self.data, self.alpha, self.binary_data)
+            y_parents, y_children, y_undirected_cols = output_package[0], output_package[1], output_package[2]
+            t_parents, t_children, t_undirected_cols = output_package[3], output_package[4], output_package[5]
+
+            if len(y_undirected_cols) > 0 or len(t_undirected_cols) > 0:
+                y_pc = y_parents + y_children + y_undirected_cols
+                t_pc = t_parents + t_children + y_undirected_cols
+                y_parents, y_children, t_parents, t_children = self.eo.orient_edges(self.data, y_pc, t_pc,
+                                                                                    known_parents_y=y_parents,
+                                                                                    known_parents_t=t_parents,
+                                                                                    known_children_y=y_children,
+                                                                                    known_children_t=t_children)
+        else:
+            y_pc, t_pc = self.pc.output_pc(self.data, self.alpha, self.binary_data)
+            known_parents_y, known_parents_t = None, None
+            known_children_y, known_children_t = None, None
+            if self.check_colliders:
+                known_parents_y, known_parents_t = self._independence_parents(y_pc, t_pc)
+                if len(known_parents_y) > 0:
+                    known_children_y = [i for i in y_pc if i not in known_parents_y]
+                if len(known_parents_t) > 0:
+                    known_children_t = [i for i in t_pc if i not in known_parents_t]
+            y_parents, y_children, t_parents, t_children = self.eo.orient_edges(self.data, y_pc, t_pc,
+                                                                                known_parents_y=known_parents_y,
+                                                                                known_parents_t=known_parents_t,
+                                                                                known_children_y=known_children_y,
+                                                                                known_children_t=known_children_t)
 
         return y_parents, y_children, t_parents, t_children
 
     def get_input_parent_children(self, data, input_var, known_parents):
-        pc = self.pc.output_input_pc(data, input_var, self.alpha, self.binary_data, known_parents=known_parents)
 
-        known_parent_colliders = []
-        if self.check_colliders:
-            known_parent_colliders = self._independence_parents_input(pc, input_var)
-        known_parent_colliders = known_parent_colliders + known_parents
-        known_children_colliders = None
-        if len(known_parent_colliders) > 0:
-            known_children_colliders = [i for i in pc if i not in pc]
+        if self.pc.orients_edges:
+            parents, children, input_undirected = self.pc.output_input_pc(data, input_var, self.alpha,
+                                                                          self.binary_data,
+                                                                          known_parents=known_parents)
+            if len(input_undirected) > 0:
+                pc = parents + children + input_undirected
+                parents, children = self.eo.orient_input_edge(data, pc, input_var,
+                                                              known_parents=parents,
+                                                              known_children=children)
+        else:
+            pc = self.pc.output_input_pc(data, input_var, self.alpha, self.binary_data, known_parents=known_parents)
 
-        parents, children = self.eo.orient_input_edge(data, pc, input_var, known_parents=known_parent_colliders,
-                                                      known_children=known_children_colliders)
+            known_parent_colliders = []
+            if self.check_colliders:
+                known_parent_colliders = self._independence_parents_input(pc, input_var)
+            known_parent_colliders = known_parent_colliders + known_parents
+            known_children_colliders = None
+            if len(known_parent_colliders) > 0:
+                known_children_colliders = [i for i in pc if i not in pc]
+
+            parents, children = self.eo.orient_input_edge(data, pc, input_var, known_parents=known_parent_colliders,
+                                                          known_children=known_children_colliders)
 
         return parents, children
 
@@ -270,3 +358,48 @@ class PCFeatureSelect:
             print(f"Elapsed time for independence of pc({input_var}) structure: {end - start:0.3f}")
 
         return known_parents_y
+
+    def optimal_adjust(self, graph, treatment="t", outcome="y"):
+        # all_paths_from_t_to_y = list(nx.all_simple_paths(graph, treatment, outcome))
+        # posscn = set().union(*all_paths_from_t_to_y)
+        # posscn.add(outcome)
+        # posscn.remove(treatment)
+        # possde = [nx.descendants(graph, node) for node in posscn]
+        # possde = set().union(*possde)
+        # forbidden_set = possde.union(treatment)
+
+        all_paths_from_t_to_y = list(nx.all_simple_paths(graph, treatment, outcome))
+        posscn = set().union(*all_paths_from_t_to_y)
+        # posscn.add(outcome)
+        # posscn.remove(treatment)
+        possde = [nx.descendants(graph, node) for node in posscn]
+        possde = set().union(*possde)
+        forbidden_set = possde.union(treatment)
+
+        pacn = [list(graph.predecessors(node)) for node in posscn]
+        pacn = set().union(*pacn)
+
+        adjustment_set = pacn.difference(forbidden_set)
+
+        non_forbidden_set = set(list(graph.nodes)).difference(forbidden_set)
+        self.adjustment_set = list(adjustment_set)
+
+        return self.adjustment_set
+
+    def non_forbidden(self, graph, treatment="t", outcome="y"):
+        all_paths_from_t_to_y = list(nx.all_simple_paths(graph, treatment, outcome))
+        forbidden_set = set().union(*all_paths_from_t_to_y)
+        possde = [nx.descendants(graph, node) for node in forbidden_set]
+        possde = set().union(*possde)
+        forbidden_set = forbidden_set.union(possde)
+
+        treatment_nodes = [treatment]
+        outcome_nodes = [outcome]
+        forbidden_set = forbidden_set.union(treatment_nodes).union(outcome_nodes)
+
+        all_nodes = set(graph.nodes())
+
+        adjustment_set = all_nodes.difference(forbidden_set)
+        self.adjustment_set = list(adjustment_set)
+
+        return self.adjustment_set

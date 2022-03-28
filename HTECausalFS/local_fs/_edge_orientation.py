@@ -1,3 +1,6 @@
+import sys
+import joblib
+sys.modules['sklearn.externals.joblib'] = joblib
 import cdt
 from cdt.causality.pairwise import IGCI, RECI, CDS
 from cdt.causality.graph import PC
@@ -55,6 +58,7 @@ class EdgeOrientation:
         # ----------------------------------------------------------------
         y_dat = data[[self.y_col] + y_pc]
         y_graph = nx.Graph()
+        y_graph.add_node(self.y_col)
         for col in y_pc:
             if known_parents_y is not None and col in known_parents_y:
                 continue
@@ -67,6 +71,7 @@ class EdgeOrientation:
         else:
             y_output = obj.orient_graph(y_dat, nx.Graph(y_graph))
 
+        y_output.add_node(self.y_col)
         y_parents = []
         for parent in y_output.predecessors(self.y_col):
             y_parents.append(parent)
@@ -106,6 +111,7 @@ class EdgeOrientation:
 
         t_dat = data[[self.t_col] + t_pc]
         t_graph = nx.Graph()
+        t_graph.add_node(self.t_col)
         for col in t_pc:
             if known_parents_t is not None and col in known_parents_t:
                 continue
@@ -119,6 +125,7 @@ class EdgeOrientation:
         else:
             t_output = obj.orient_graph(t_dat, nx.Graph(t_graph))
 
+        t_output.add_node(self.y_col)
         t_parents = []
         for parent in t_output.predecessors(self.t_col):
             t_parents.append(parent)

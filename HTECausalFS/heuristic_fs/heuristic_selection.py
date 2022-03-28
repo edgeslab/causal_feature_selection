@@ -31,6 +31,8 @@ class _HeuristicSelection:
         self.y_col = y_col
         self.t_col = t_col
 
+        self.selected_columns = None
+
     def reset(self):
         self.fit = False
 
@@ -125,6 +127,9 @@ class _HeuristicSelection:
                 exit_flag = True
 
         self.reset()
+
+        self.selected_columns = keep_cols
+
         return keep_cols
 
     def backward_selection(self, estimator, data, metalearner=False, neural_network=False, nn_params=None,
@@ -192,6 +197,8 @@ class _HeuristicSelection:
 
         # after training we need to reset all estimators
         self.reset()
+        self.selected_columns = keep_cols
+
         return keep_cols
 
     def select_top_k_backwards(self, estimator, data, metalearner=False, neural_network=False, k=10, nn_params=None):
@@ -233,6 +240,8 @@ class _HeuristicSelection:
 
         # after training we need to reset all estimators
         self.reset()
+        self.selected_columns = keep_cols
+
         return keep_cols
 
     def select_top_k_forwards(self, estimator, data, metalearner=False, neural_network=False, k=10, nn_params=None):
@@ -275,6 +284,8 @@ class _HeuristicSelection:
 
         # after training we need to reset all estimators
         self.reset()
+        self.selected_columns = keep_cols
+
         return keep_cols
 
     def simple_genetic_algorithm(self, estimator, data, pop_size=100, num_generations=10, metalearner=False,
@@ -338,6 +349,8 @@ class _HeuristicSelection:
         sorted_idx = np.argsort(scores)
         selected_chrom = chromosomes[sorted_idx[0]]
         keep_cols = [col for i, col in enumerate(full_cols) if selected_chrom[i] == 1]
+
+        self.selected_columns = keep_cols
 
         return keep_cols
 
@@ -522,6 +535,8 @@ class _HeuristicSelection:
 
         keep_cols = [col for i, col in enumerate(full_cols) if best_chrom[i] == 1]
 
+        self.selected_columns = keep_cols
+
         return keep_cols
 
     def competitive_swarm(self, estimator, data, swarm_size=100, max_generations=200, metalearner=False,
@@ -619,6 +634,8 @@ class _HeuristicSelection:
                 print(f"Iteration {time} finished. Best score = {best_error}")
 
         keep_cols = [col for i, col in enumerate(full_cols) if best_particle[i] > threshold]
+
+        self.selected_columns = keep_cols
 
         return keep_cols
 
