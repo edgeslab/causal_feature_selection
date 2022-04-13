@@ -869,7 +869,7 @@ class InversePropensityWeighting(_HeuristicSelection):
             train_y = y
             train_t = t
 
-        self.propensity_model.fit(train_x, train_y)
+        self.propensity_model.fit(train_x, train_t)
 
         treated_propensity = self.propensity_model.predict_proba(x[t == 1])[:, 1]
         control_propensity = self.propensity_model.predict_proba(x[t == 0])[:, 1]
