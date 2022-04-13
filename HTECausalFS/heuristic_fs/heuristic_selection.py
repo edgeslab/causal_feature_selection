@@ -854,3 +854,35 @@ class TauRisk(_HeuristicSelection):
         t_risk = np.mean(t_risk ** 2)
 
         return t_risk
+
+
+class InversePropensityWeighting(_HeuristicSelection):
+
+    def __init__(self, propensity_model=LogisticRegression(max_iter=1000, solver="saga"), **kwargs):
+        super().__init__(**kwargs)
+
+        self.propensity_model = propensity_model
+
+    def ipw(self, x, y, t, pred, train_x=None, train_y=None, train_t=None):
+        if train_x is None or train_y is None or train_t is None:
+            train_x = x
+            train_y = y
+            train_t = t
+
+        self.propensity_model.fit(train_x, train_y)
+
+        treated_propensity = self.propensity_model.predict_proba(x[t == 1])[:, 1]
+        control_propensity = self.propensity_model.predict_proba(x[t == 0])[:, 1]
+
+        propensity = np.zeros(t.shape)
+        propensity[t == 1] = treated_propensity
+        propensity[t == 0] = control_propensity
+
+        propensity_plugin_left = t * y / propensity
+        propensity_plugin_right = (1 - t) * y / (1 - propensity)
+
+        propensity_plugin = propensity_plugin_left - propensity_plugin_right
+
+        err = np.mean((propensity_plugin - pred) ** 2)
+
+        return err
