@@ -1,6 +1,6 @@
 # causal_feature_selection
  
-Implements Local Causal Feature Selection (LCFS) and Global Causal Feature Selection (GCFS)
+Implements Heterogeneous Treatment Effect - Feature Selection (HTE-FS)
 
 ## Requirements
 
