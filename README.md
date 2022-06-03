@@ -1,6 +1,6 @@
 # causal_feature_selection
  
-Implements Heterogeneous Treatment Effect - Feature Selection (HTE-FS)
+Implements Heterogeneous Treatment Effect - Feature Selection (HTE-FS) from our paper: "Improving Data-driven Heterogeneous Treatment Effect Estimation Under Structure Uncertainty" accepted at KDD'22.
 
 ## Requirements
 
